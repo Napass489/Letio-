@@ -1,0 +1,1895 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+  <title>LetiO - เช็กสถานะเมลยูทูป</title>
+
+  <!-- โหลดฟอนต์ภาษาไทยน่ารักอ่านง่าย (Prompt) และฟอนต์ชื่อร้านสุดน่ารัก (Fredoka + Mali) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=Mali:wght@600;700&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- โหลด Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- โหลด Supabase JS SDK v2 -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    if (window.tailwind) {
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Prompt', 'sans-serif'],
+            },
+            colors: {
+              pinkSoft: '#FFD6E8',
+              pinkMid: '#FF9EC7',
+              pinkDeep: '#E05A8D',
+              blueSoft: '#D6EEFF',
+              blueMid: '#7CC4FA',
+              blueDeep: '#2F80ED',
+              yellowSoft: '#FFF2B2',
+              yellowBg: '#FFF7D6',
+              cream: '#FFFDF9',
+            },
+            boxShadow: {
+              card: '0 8px 24px -8px rgba(224, 90, 141, 0.14)',
+              soft: '0 4px 14px -4px rgba(124, 196, 250, 0.22)',
+            },
+          },
+        },
+      };
+    }
+  </script>
+
+  <style>
+    /* พื้นหลังพาสเทลอ่อนละมุน ชมพู-ฟ้า-เหลือง */
+    body {
+      font-family: 'Prompt', sans-serif;
+      background: linear-gradient(135deg, #fff0f6 0%, #fffbe6 50%, #eef7ff 100%);
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* ซ่อน Scrollbar เพื่อความสะอาดตาแต่ยังเลื่อนได้ปกติ */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    /* ฟอนต์และสไตล์ชื่อร้านให้น่ารักละมุน */
+    .cute-store-name {
+      font-family: 'Fredoka', 'Mali', 'Prompt', sans-serif;
+      letter-spacing: 0.02em;
+      text-shadow: 0 2px 0 #FFD6E8, 0 4px 10px rgba(224, 90, 141, 0.18);
+    }
+
+    /* แถบเลื่อนสีชมพูพาสเทลบางๆ สำหรับกล่องรายชื่ออีเมล */
+    .pastel-scrollbar {
+      scrollbar-width: thin;
+      scrollbar-color: #FF9EC7 #FFF5F9;
+    }
+    .pastel-scrollbar::-webkit-scrollbar {
+      width: 6px;
+    }
+    .pastel-scrollbar::-webkit-scrollbar-track {
+      background: #FFF5F9;
+      border-radius: 9999px;
+    }
+    .pastel-scrollbar::-webkit-scrollbar-thumb {
+      background-color: #FFB3D1;
+      border-radius: 9999px;
+      border: 1px solid #FFF5F9;
+    }
+    .pastel-scrollbar::-webkit-scrollbar-thumb:hover {
+      background-color: #FF8FBC;
+    }
+
+    /* แอนิเมชันข้อความวิ่งต่อเนื่องนุ่มนวล */
+    .marquee-track {
+      display: inline-flex;
+      width: max-content;
+      animation: marqueeScroll 22s linear infinite;
+    }
+    .marquee-wrapper:hover .marquee-track {
+      animation-play-state: paused;
+    }
+    @keyframes marqueeScroll {
+      0% {
+        transform: translateX(0);
+      }
+      100% {
+        transform: translateX(-50%);
+      }
+    }
+
+    /* ลูกเล่นป้ายสถานะพาสเทลแบบมีมิติ + เงาละมุน + แสงวิ้งวิ่งผ่านเบาๆ */
+    .status-badge {
+      position: relative;
+      overflow: hidden;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+      transition: transform 0.18s ease, box-shadow 0.18s ease;
+    }
+    .status-badge::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -120%;
+      width: 65%;
+      height: 100%;
+      background: linear-gradient(
+        110deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.6) 50%,
+        transparent 100%
+      );
+      animation: statusShimmer 3.8s ease-in-out infinite;
+      pointer-events: none;
+    }
+    @keyframes statusShimmer {
+      0%, 62% {
+        left: -120%;
+      }
+      100% {
+        left: 160%;
+      }
+    }
+    .status-dot-wrap {
+      position: relative;
+      display: inline-flex;
+      width: 7px;
+      height: 7px;
+      flex-shrink: 0;
+    }
+    .status-dot-ping {
+      position: absolute;
+      inset: 0;
+      border-radius: 9999px;
+      opacity: 0.65;
+      animation: statusDotPing 1.9s cubic-bezier(0, 0, 0.2, 1) infinite;
+    }
+    @keyframes statusDotPing {
+      75%, 100% {
+        transform: scale(2.1);
+        opacity: 0;
+      }
+    }
+
+    /* แอนิเมชันเปิด Modal */
+    @keyframes popIn {
+      0% {
+        opacity: 0;
+        transform: scale(0.95) translateY(8px);
+      }
+      100% {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+      }
+    }
+    .animate-pop {
+      animation: popIn 0.22s ease-out forwards;
+    }
+  </style>
+</head>
+
+<body class="min-h-[100dvh] text-slate-700 antialiased selection:bg-pinkSoft selection:text-pinkDeep p-0 sm:py-6 sm:px-4 sm:flex sm:items-center sm:justify-center">
+
+  <!-- =========================================================
+       MAIN WRAPPER:
+       - มือถือ (< 640px): แสดงเต็มหน้าจออัตโนมัติ (ไม่มีกรอบ ไม่มีขอบมน)
+       - iPad / คอมพิวเตอร์ (>= 640px): แสดงในกรอบจอมือถือพาสเทลน่ารักตรงกลางหน้าจอ
+       ========================================================= -->
+  <div class="w-full min-h-[100dvh] bg-white/95 backdrop-blur-md flex flex-col sm:min-h-0 sm:w-[440px] sm:h-[88dvh] sm:max-h-[820px] sm:rounded-[38px] sm:border-[8px] sm:border-[#FFE4F0] sm:ring-4 sm:ring-white/95 sm:shadow-[0_24px_55px_-12px_rgba(224,90,141,0.22),0_10px_28px_-8px_rgba(124,196,250,0.22)] sm:overflow-hidden relative">
+
+    <!-- พื้นที่เนื้อหาหลัก -->
+    <div class="w-full flex-1 sm:overflow-y-auto no-scrollbar p-4 sm:px-5 sm:py-5 space-y-3.5 sm:space-y-4">
+
+      <!-- =======================================================
+           ส่วนที่ 0: แถบหัวเว็บแบบมินิมอล (โลโก้ + ชื่อร้าน + ปุ่มไอคอนฟันเฟือง)
+           ======================================================= -->
+      <header class="flex items-center justify-between gap-3 pb-1">
+        <button
+          type="button"
+          onclick="openAdminModal()"
+          title="แตะเพื่อเปิดระบบหลังบ้านแอดมิน"
+          class="flex items-center gap-3 text-left group focus:outline-none min-h-[48px]"
+        >
+          <div class="relative shrink-0">
+            <img
+              id="headerLogo"
+              src="https://i.postimg.cc/qvNS6h23/IMG-9596.jpg"
+              onerror="this.onerror=null;this.src='https://placehold.co/100x100/FFD6E8/E05A8D?text=LetiO';"
+              alt="LetiO Logo"
+              class="w-12 h-12 rounded-full object-cover border-2 border-pinkSoft shadow-sm group-hover:scale-105 transition-transform"
+            />
+            <span class="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-emerald-400 border-2 border-white rounded-full"></span>
+          </div>
+          <div>
+            <div class="flex items-center gap-1.5">
+              <h1 id="headerStoreName" class="cute-store-name text-2xl font-bold text-pinkDeep leading-none group-hover:scale-[1.03] transition-transform origin-left">
+                LetiO
+              </h1>
+              <span class="text-sm leading-none select-none" aria-hidden="true">🎀</span>
+            </div>
+            <p id="headerSubtitle" class="text-xs text-slate-500 mt-1">
+              เช็กสถานะเมลยูทูป
+            </p>
+          </div>
+        </button>
+
+        <!-- ปุ่มไอคอนฟันเฟืองล้วนสำหรับเปิดหลังบ้านแอดมิน -->
+        <button
+          type="button"
+          onclick="openAdminModal()"
+          aria-label="แอดมิน"
+          title="ระบบหลังบ้านแอดมิน"
+          class="w-11 h-11 rounded-full flex items-center justify-center bg-cream border border-pinkSoft/90 text-slate-500 hover:bg-pinkSoft/45 hover:text-pinkDeep active:scale-95 transition-all shrink-0 shadow-sm"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        </button>
+      </header>
+
+      <!-- =======================================================
+           ส่วนที่ 1: ข้อความวิ่งเหนือแบนเนอร์ (พื้นสีเหลืองพาสเทลล้วน)
+           ======================================================= -->
+      <section aria-label="ข้อความประกาศวิ่ง" class="marquee-wrapper flex items-center gap-2 px-3 py-2 rounded-full bg-[#FFF7D6] border border-[#FFE599] shadow-sm overflow-hidden">
+        <span class="shrink-0 w-7 h-7 rounded-full bg-white flex items-center justify-center text-sm shadow-sm border border-[#FFE599]" aria-hidden="true">📢</span>
+        <div class="overflow-hidden flex-1">
+          <div class="marquee-track text-xs font-medium text-slate-700 whitespace-nowrap">
+            <span id="marqueeTextPrimary" class="pr-10"></span>
+            <span id="marqueeTextClone" class="pr-10" aria-hidden="true"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- =======================================================
+           ส่วนที่ 2: แบนเนอร์จากร้าน
+           ======================================================= -->
+      <section aria-label="แบนเนอร์ร้าน" class="-mx-2 sm:-mx-2.5 rounded-[22px] overflow-hidden border-2 border-blueSoft bg-white shadow-soft">
+        <img
+          id="bannerImage"
+          src="https://i.postimg.cc/CKD2J3v2/IMG-9597.jpg"
+          onerror="this.onerror=null;this.src='https://placehold.co/800x400/D6EEFF/2F80ED?text=LetiO+Banner';"
+          alt="แบนเนอร์ร้าน LetiO"
+          class="w-full h-auto object-cover block"
+        />
+      </section>
+
+      <!-- =======================================================
+           ส่วนที่ 3: ช่องค้นหา e-mail
+           ======================================================= -->
+      <section aria-label="ช่องค้นหาอีเมล" class="space-y-2.5">
+        <div class="relative flex items-center">
+          <span class="absolute left-3.5 text-pinkDeep pointer-events-none" aria-hidden="true">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 105.65 5.65a7.5 7.5 0 0011 11z" />
+            </svg>
+          </span>
+          <input
+            id="searchInput"
+            type="text"
+            inputmode="email"
+            autocomplete="off"
+            placeholder="พิมพ์ค้นหา e-mail ของคุณที่นี่..."
+            oninput="handleSearchInput(this.value)"
+            class="w-full min-h-[48px] pl-11 pr-11 py-2.5 text-[16px] rounded-2xl bg-pinkSoft/30 border-2 border-pinkSoft focus:border-pinkMid focus:bg-white focus:outline-none text-slate-700 placeholder:text-slate-400 transition-all shadow-sm"
+          />
+          <button
+            id="clearSearchBtn"
+            type="button"
+            onclick="clearSearch()"
+            aria-label="ล้างคำค้นหา"
+            class="hidden absolute right-2 w-9 h-9 rounded-full items-center justify-center text-slate-400 hover:text-pinkDeep hover:bg-pinkSoft/40 transition-colors"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- การ์ดสรุปผลการค้นหาแบบทันที -->
+        <div id="searchSummaryCard" class="hidden rounded-2xl p-3 border text-sm transition-all"></div>
+      </section>
+
+      <!-- =======================================================
+           ส่วนที่ 4: กำหนดชำระรอบบิลวันนี้
+           ======================================================= -->
+      <section aria-label="กำหนดชำระรอบบิลวันนี้" class="rounded-[24px] bg-cream border-2 border-yellowSoft shadow-card p-3.5 sm:p-4 space-y-3.5">
+        <div class="text-center space-y-1">
+          <h2 id="billingTitle" class="text-base sm:text-lg font-bold text-slate-800">
+            กำหนดชำระรอบบิลวันนี้
+          </h2>
+          <p id="todayDateLabel" class="text-xs text-slate-400 font-normal"></p>
+        </div>
+
+        <!-- ปุ่มตัวกรองสถานะแบบ Pill (ซ่อนไว้ตามที่กำหนด) -->
+        <div class="hidden items-center gap-2 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1 justify-start">
+          <button type="button" data-filter="all" onclick="setStatusFilter('all')" class="filter-pill min-h-[38px] px-3.5 py-2 rounded-full text-xs font-medium transition-all whitespace-nowrap shrink-0"></button>
+          <button type="button" data-filter="ชำระเงินแล้ว" onclick="setStatusFilter('ชำระเงินแล้ว')" class="filter-pill min-h-[38px] px-3.5 py-2 rounded-full text-xs font-medium transition-all whitespace-nowrap shrink-0"></button>
+          <button type="button" data-filter="ยืนยันการชำระเงิน" onclick="setStatusFilter('ยืนยันการชำระเงิน')" class="filter-pill min-h-[38px] px-3.5 py-2 rounded-full text-xs font-medium transition-all whitespace-nowrap shrink-0"></button>
+          <button type="button" data-filter="รอชำระเงิน" onclick="setStatusFilter('รอชำระเงิน')" class="filter-pill min-h-[38px] px-3.5 py-2 rounded-full text-xs font-medium transition-all whitespace-nowrap shrink-0"></button>
+          <button type="button" data-filter="รอตรวจสอบ" onclick="setStatusFilter('รอตรวจสอบ')" class="filter-pill min-h-[38px] px-3.5 py-2 rounded-full text-xs font-medium transition-all whitespace-nowrap shrink-0"></button>
+        </div>
+
+        <!-- ตาราง 2 คอลัมน์ (ซ้าย: e-mail | ขวา: สถานะ) -->
+        <div class="rounded-2xl overflow-hidden border border-pinkSoft/60 bg-white">
+          <div class="grid grid-cols-12 items-center px-3.5 py-2.5 bg-gradient-to-r from-pinkSoft/45 via-yellowSoft/40 to-blueSoft/45 text-xs font-semibold text-slate-700 border-b border-pinkSoft/40">
+            <div class="col-span-7">e-mail</div>
+            <div class="col-span-5 text-right">สถานะ</div>
+          </div>
+
+          <!-- รายการอีเมล (เลื่อนดูภายในกรอบ) -->
+          <div id="emailListContainer" class="max-h-[260px] sm:max-h-[280px] overflow-y-auto pastel-scrollbar divide-y divide-slate-100"></div>
+
+          <!-- กรณีกำลังโหลดข้อมูลจากฐานข้อมูล -->
+          <div id="loadingState" class="py-8 px-4 text-center space-y-2">
+            <div class="inline-block w-6 h-6 border-2 border-pinkSoft border-t-pinkDeep rounded-full animate-spin"></div>
+            <p class="text-xs font-medium text-slate-500">กำลังโหลดข้อมูลล่าสุด...</p>
+          </div>
+
+          <!-- กรณีเชื่อมต่อฐานข้อมูลขัดข้องหรืออินเทอร์เน็ตมีปัญหา -->
+          <div id="errorState" class="hidden py-7 px-4 text-center space-y-2.5">
+            <div class="text-2xl">⚠️</div>
+            <p id="errorStateText" class="text-xs font-medium text-rose-600 leading-relaxed">ไม่สามารถโหลดข้อมูลได้ในขณะนี้</p>
+            <p id="errorStateDetail" class="hidden text-[11px] text-slate-400 break-words"></p>
+            <button
+              type="button"
+              onclick="fetchAllData(true)"
+              class="min-h-[38px] px-4 py-1.5 rounded-full bg-pinkSoft/60 hover:bg-pinkSoft text-pinkDeep text-xs font-semibold transition-colors"
+            >
+              ลองโหลดใหม่
+            </button>
+          </div>
+
+          <!-- กรณีไม่พบรายการ -->
+          <div id="emptyState" class="hidden py-8 px-4 text-center space-y-1.5">
+            <div class="text-2xl">🔎</div>
+            <p id="emptyStateTitle" class="text-sm font-medium text-slate-600">ไม่พบอีเมลที่ค้นหา</p>
+            <p id="emptyStateDesc" class="text-xs text-slate-400">ลองตรวจสอบตัวสะกดหรือติดต่อแอดมินได้เลยนะคะ</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- =======================================================
+           ส่วนที่ 5: ปุ่มคู่ด้านล่าง (ช่องทางการติดต่อ / openchat)
+           ======================================================= -->
+      <section aria-label="ช่องทางการติดต่อและกลุ่มพูดคุย" class="grid grid-cols-2 gap-3 pt-0.5">
+        <button
+          type="button"
+          onclick="openContactModal()"
+          class="min-h-[56px] rounded-2xl bg-pinkSoft/70 hover:bg-pinkSoft border-2 border-pinkSoft text-pinkDeep font-semibold text-sm flex items-center justify-center gap-2 px-3 py-3 shadow-sm active:scale-[0.98] transition-all"
+        >
+          <span class="text-base" aria-hidden="true">💌</span>
+          <span>ช่องทางการติดต่อ</span>
+        </button>
+
+        <button
+          type="button"
+          onclick="openOpenChatModal()"
+          class="min-h-[56px] rounded-2xl bg-blueSoft/75 hover:bg-blueSoft border-2 border-blueSoft text-blueDeep font-semibold text-sm flex items-center justify-center gap-2 px-3 py-3 shadow-sm active:scale-[0.98] transition-all"
+        >
+          <span class="text-base" aria-hidden="true">💬</span>
+          <span>openchat</span>
+        </button>
+      </section>
+
+      <!-- ท้ายเว็บเล็กๆ -->
+      <footer class="text-center pt-1 pb-2">
+        <p class="text-[11px] text-slate-400">
+          © <span id="footerYear"></span> <span id="footerStoreName">LetiO</span> • เช็กสถานะออนไลน์
+        </p>
+      </footer>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       MODAL 1: รายละเอียดอีเมล (เมื่อลูกค้าแตะที่แถว)
+       ========================================================= -->
+  <div id="detailModal" class="hidden fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4" onclick="if(event.target===this) closeDetailModal()">
+    <div class="animate-pop w-full max-w-sm rounded-3xl bg-white border-2 border-pinkSoft shadow-xl p-5 space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+          <span>📧</span> รายละเอียดสถานะ
+        </h3>
+        <button type="button" onclick="closeDetailModal()" class="w-9 h-9 rounded-full bg-slate-100 hover:bg-pinkSoft/50 text-slate-500 flex items-center justify-center">
+          ✕
+        </button>
+      </div>
+
+      <div class="space-y-3 text-sm">
+        <div class="rounded-2xl bg-cream border border-yellowSoft p-3.5 space-y-2.5">
+          <div>
+            <span class="text-xs text-slate-400 block">อีเมลยูทูป</span>
+            <p id="detailEmail" class="font-semibold text-slate-800 break-all"></p>
+          </div>
+          <div class="flex items-center justify-between pt-1 border-t border-yellowSoft/70">
+            <span class="text-xs text-slate-400">สถานะปัจจุบัน</span>
+            <span id="detailStatusBadge"></span>
+          </div>
+          <div class="grid grid-cols-1 gap-2 pt-1 border-t border-yellowSoft/70 text-xs">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-slate-400">👑 หัวแฟม</span>
+              <span id="detailFamilyHead" class="font-medium text-slate-700 text-right"></span>
+            </div>
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-slate-400">🛒 วันที่ซื้อ</span>
+              <span id="detailPurchaseDate" class="font-medium text-slate-700 text-right"></span>
+            </div>
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-slate-400">📅 วันหมดอายุ</span>
+              <span id="detailCycle" class="font-semibold text-pinkDeep text-right"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="rounded-2xl bg-blueSoft/25 border border-blueSoft/70 p-3.5">
+          <span class="text-xs text-slate-400 block mb-0.5">หมายเหตุจากร้าน</span>
+          <p id="detailNote" class="text-xs text-slate-700 leading-relaxed"></p>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onclick="closeDetailModal()"
+        class="w-full min-h-[44px] rounded-2xl bg-pinkDeep text-white font-medium text-sm hover:opacity-95 active:scale-[0.99] transition-all"
+      >
+        ปิดหน้าต่าง
+      </button>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       MODAL 2: ช่องทางการติดต่อ (Facebook + Line แก้ปัญหายู)
+       ========================================================= -->
+  <div id="contactModal" class="hidden fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4" onclick="if(event.target===this) closeContactModal()">
+    <div class="animate-pop w-full max-w-sm rounded-3xl bg-white border-2 border-pinkSoft shadow-xl p-5 space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+          <span>💌</span> ช่องทางการติดต่อ
+        </h3>
+        <button type="button" onclick="closeContactModal()" class="w-9 h-9 rounded-full bg-slate-100 hover:bg-pinkSoft/50 text-slate-500 flex items-center justify-center">
+          ✕
+        </button>
+      </div>
+
+      <div class="space-y-3 text-sm">
+        <!-- Facebook -->
+        <div class="rounded-2xl bg-blueSoft/25 border border-blueSoft p-3.5 space-y-2">
+          <div class="flex items-center justify-between gap-2">
+            <p class="text-xs font-semibold text-blueDeep">📘 Facebook</p>
+            <button
+              type="button"
+              onclick="copyText(appState.settings.contactIg, 'คัดลอกลิงก์ Facebook แล้ว')"
+              class="shrink-0 min-h-[32px] px-2.5 rounded-xl bg-white border border-blueSoft text-blueDeep text-xs font-medium hover:bg-blueSoft/40"
+            >
+              คัดลอก
+            </button>
+          </div>
+          <p id="contactIgText" class="text-xs text-slate-600 truncate"></p>
+          <a
+            id="contactFbLink"
+            href="#"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="w-full min-h-[40px] rounded-xl bg-blueDeep text-white font-semibold text-xs flex items-center justify-center hover:opacity-95 transition-all"
+          >
+            เปิดหน้า Facebook
+          </a>
+        </div>
+
+        <!-- Line แก้ปัญหายู -->
+        <div class="rounded-2xl bg-pinkSoft/25 border border-pinkSoft p-3.5 space-y-2">
+          <div class="flex items-center justify-between gap-2">
+            <p class="text-xs font-semibold text-pinkDeep">💚 Line แก้ปัญหายู</p>
+            <button
+              type="button"
+              onclick="copyText(appState.settings.contactLine, 'คัดลอกลิงก์ Line แก้ปัญหายู แล้ว')"
+              class="shrink-0 min-h-[32px] px-2.5 rounded-xl bg-white border border-pinkSoft text-pinkDeep text-xs font-medium hover:bg-pinkSoft/40"
+            >
+              คัดลอก
+            </button>
+          </div>
+          <p id="contactLineText" class="text-xs text-slate-600 truncate"></p>
+          <a
+            id="contactActionLink"
+            href="#"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="w-full min-h-[40px] rounded-xl bg-pinkDeep text-white font-semibold text-xs flex items-center justify-center hover:opacity-95 transition-all"
+          >
+            ทักแชท Line แก้ปัญหายู
+          </a>
+        </div>
+
+        <p id="contactHoursText" class="text-center text-xs text-slate-400 pt-0.5"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       MODAL 3: LINE OpenChat
+       ========================================================= -->
+  <div id="openChatModal" class="hidden fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4" onclick="if(event.target===this) closeOpenChatModal()">
+    <div class="animate-pop w-full max-w-sm rounded-3xl bg-white border-2 border-blueSoft shadow-xl p-5 space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+          <span>💬</span> LINE OpenChat
+        </h3>
+        <button type="button" onclick="closeOpenChatModal()" class="w-9 h-9 rounded-full bg-slate-100 hover:bg-blueSoft/50 text-slate-500 flex items-center justify-center">
+          ✕
+        </button>
+      </div>
+
+      <div class="space-y-3 text-sm">
+        <div class="rounded-2xl bg-blueSoft/25 border border-blueSoft p-3.5 space-y-2">
+          <div>
+            <p class="text-xs font-semibold text-blueDeep">ชื่อกลุ่ม</p>
+            <p id="openChatNameText" class="text-sm font-semibold text-slate-800 mt-0.5"></p>
+          </div>
+          <div class="pt-1 flex items-center justify-between gap-2">
+            <p id="openChatUrlPreview" class="text-xs text-slate-500 truncate"></p>
+            <button
+              type="button"
+              onclick="copyText(appState.settings.openChatUrl, 'คัดลอกลิงก์ LINE OpenChat แล้ว')"
+              class="shrink-0 min-h-[36px] px-3 rounded-xl bg-white border border-blueSoft text-blueDeep text-xs font-medium hover:bg-blueSoft/40"
+            >
+              คัดลอกลิงก์
+            </button>
+          </div>
+        </div>
+
+        <a
+          id="openChatJoinLink"
+          href="#"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="w-full min-h-[44px] rounded-2xl bg-blueDeep text-white font-semibold text-sm flex items-center justify-center gap-2 hover:opacity-95 active:scale-[0.99] transition-all"
+        >
+          <span>เข้ากลุ่ม LINE OpenChat</span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       MODAL 4: ระบบหลังบ้านแอดมิน (เชื่อมต่อ Supabase จริง)
+       ========================================================= -->
+  <div id="adminModal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4" onclick="if(event.target===this) closeAdminModal()">
+    <div class="animate-pop w-full sm:max-w-lg max-h-[92dvh] rounded-t-3xl sm:rounded-3xl bg-white border-t-2 sm:border-2 border-pinkSoft shadow-2xl flex flex-col overflow-hidden">
+      <!-- หัว Modal แอดมิน -->
+      <div class="px-5 py-3.5 bg-gradient-to-r from-pinkSoft/45 via-yellowBg to-blueSoft/45 border-b border-pinkSoft/60 flex items-center justify-between gap-2 shrink-0">
+        <div class="min-w-0">
+          <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+            <span>⚙️</span> ระบบหลังบ้านแอดมิน
+            <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white text-emerald-600 border border-emerald-200">ออนไลน์</span>
+          </h3>
+          <p id="adminHeaderSub" class="text-[11px] text-slate-500 truncate">กรุณาเข้าสู่ระบบด้วยบัญชีแอดมิน</p>
+        </div>
+        <div class="flex items-center gap-1.5 shrink-0">
+          <button
+            id="adminLogoutHeaderBtn"
+            type="button"
+            onclick="handleAdminLogout()"
+            class="hidden min-h-[34px] px-2.5 rounded-full bg-white/90 hover:bg-rose-50 text-rose-500 border border-rose-200 text-[11px] font-semibold transition-colors"
+          >
+            ออกระบบ
+          </button>
+          <button type="button" onclick="closeAdminModal()" class="w-10 h-10 rounded-full bg-white/90 hover:bg-white text-slate-600 flex items-center justify-center shadow-sm">
+            ✕
+          </button>
+        </div>
+      </div>
+
+      <!-- หน้าล็อกอินแอดมิน -->
+      <div id="adminLoginView" class="p-5 sm:p-6 space-y-4 overflow-y-auto">
+        <div class="text-center space-y-1">
+          <div class="w-12 h-12 mx-auto rounded-2xl bg-pinkSoft/45 border border-pinkSoft flex items-center justify-center text-xl">🔐</div>
+          <h4 class="text-base font-bold text-slate-800">เข้าสู่ระบบแอดมิน</h4>
+          <p class="text-xs text-slate-500">เฉพาะบัญชีแอดมินที่ได้รับอนุญาตเท่านั้นที่แก้ไขข้อมูลได้</p>
+        </div>
+
+        <div id="adminLoginError" class="hidden rounded-2xl bg-rose-50 border border-rose-200 px-3.5 py-2.5 text-xs text-rose-600 leading-relaxed"></div>
+
+        <form id="adminLoginForm" onsubmit="handleAdminLogin(event)" class="space-y-3">
+          <div>
+            <label for="loginEmail" class="block text-xs font-medium text-slate-600 mb-1">อีเมลแอดมิน</label>
+            <input
+              id="loginEmail"
+              type="email"
+              required
+              autocomplete="username"
+              placeholder="admin@example.com"
+              class="w-full min-h-[46px] px-3.5 py-2 text-[16px] rounded-xl border border-slate-200 bg-white focus:border-pinkMid focus:outline-none"
+            />
+          </div>
+          <div>
+            <label for="loginPassword" class="block text-xs font-medium text-slate-600 mb-1">รหัสผ่าน</label>
+            <input
+              id="loginPassword"
+              type="password"
+              required
+              autocomplete="current-password"
+              placeholder="••••••••"
+              class="w-full min-h-[46px] px-3.5 py-2 text-[16px] rounded-xl border border-slate-200 bg-white focus:border-pinkMid focus:outline-none"
+            />
+          </div>
+          <button
+            id="adminLoginSubmitBtn"
+            type="submit"
+            class="w-full min-h-[46px] rounded-xl bg-pinkDeep text-white font-semibold text-sm hover:opacity-95 active:scale-[0.99] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            เข้าสู่ระบบแอดมิน
+          </button>
+        </form>
+      </div>
+
+      <!-- พื้นที่ทำงานหลังบ้าน -->
+      <div id="adminWorkspace" class="hidden flex-1 flex flex-col min-h-0 overflow-hidden">
+        <!-- แท็บเมนูหลังบ้าน -->
+        <div class="grid grid-cols-3 gap-1.5 p-2.5 bg-slate-50 border-b border-slate-100 shrink-0">
+          <button type="button" data-admin-tab="emails" onclick="switchAdminTab('emails')" class="admin-tab-btn min-h-[42px] rounded-xl text-xs font-semibold transition-all">
+            1. จัดการอีเมล
+          </button>
+          <button type="button" data-admin-tab="banner" onclick="switchAdminTab('banner')" class="admin-tab-btn min-h-[42px] rounded-xl text-xs font-semibold transition-all">
+            2. แบนเนอร์/วิ่ง
+          </button>
+          <button type="button" data-admin-tab="store" onclick="switchAdminTab('store')" class="admin-tab-btn min-h-[42px] rounded-xl text-xs font-semibold transition-all">
+            3. ร้านและติดต่อ
+          </button>
+        </div>
+
+        <!-- เนื้อหาใน Modal แอดมิน -->
+        <div class="flex-1 overflow-y-auto p-4 sm:p-5 space-y-5">
+
+          <!-- TAB 1: จัดการอีเมลและสถานะ -->
+          <div id="adminTab-emails" class="space-y-4">
+            <form id="emailForm" onsubmit="handleEmailFormSubmit(event)" class="rounded-2xl bg-cream border border-yellowSoft p-3.5 space-y-3">
+              <div class="flex items-center justify-between">
+                <h4 id="emailFormTitle" class="text-sm font-bold text-slate-800">เพิ่มรายการอีเมลใหม่</h4>
+                <button id="cancelEditBtn" type="button" onclick="resetEmailForm()" class="hidden text-xs text-pinkDeep underline">
+                  ยกเลิกการแก้ไข
+                </button>
+              </div>
+              <input type="hidden" id="editEmailId" value="" />
+
+              <div class="space-y-2.5">
+                <div>
+                  <label for="inputEmail" class="block text-xs font-medium text-slate-600 mb-1">อีเมลลูกค้า *</label>
+                  <input
+                    id="inputEmail"
+                    type="email"
+                    required
+                    placeholder="example@gmail.com"
+                    class="w-full min-h-[44px] px-3.5 py-2 text-[16px] rounded-xl border border-slate-200 bg-white focus:border-pinkMid focus:outline-none"
+                  />
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label for="inputStatus" class="block text-xs font-medium text-slate-600 mb-1">สถานะ *</label>
+                    <select
+                      id="inputStatus"
+                      class="w-full min-h-[44px] px-3 py-2 text-[16px] rounded-xl border border-slate-200 bg-white focus:border-pinkMid focus:outline-none"
+                    >
+                      <option value="ชำระเงินแล้ว">ชำระเงินแล้ว</option>
+                      <option value="ยืนยันการชำระเงิน">ยืนยันการชำระเงิน</option>
+                      <option value="รอชำระเงิน">รอชำระเงิน</option>
+                      <option value="รอตรวจสอบ">รอตรวจสอบ</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label for="inputFamilyHead" class="block text-xs font-medium text-slate-600 mb-1">หัวแฟม</label>
+                    <input
+                      id="inputFamilyHead"
+                      type="text"
+                      placeholder="เช่น แฟม A / พี่มินนี่"
+                      class="w-full min-h-[44px] px-3.5 py-2 text-[16px] rounded-xl border border-slate-200 bg-white focus:border-pinkMid focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label for="inputPurchaseDate" class="block text-xs font-medium text-slate-600 mb-1">วันที่ซื้อ</label>
+                    <input
+                      id="inputPurchaseDate"
+                      type="text"
+                      placeholder="เช่น 25/11/2569"
+                      class="w-full min-h-[44px] px-3.5 py-2 text-[16px] rounded-xl border border-slate-200 bg-white focus:border-pinkMid focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label for="inputCycle" class="block text-xs font-medium text-slate-600 mb-1">วันหมดอายุ</label>
+                    <input
+                      id="inputCycle"
+                      type="text"
+                      placeholder="เช่น 25/12/2569"
+                      class="w-full min-h-[44px] px-3.5 py-2 text-[16px] rounded-xl border border-slate-200 bg-white focus:border-pinkMid focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label for="inputNote" class="block text-xs font-medium text-slate-600 mb-1">หมายเหตุเพิ่มเติม</label>
+                  <input
+                    id="inputNote"
+                    type="text"
+                    placeholder="เช่น ต่ออายุเรียบร้อย ขอบคุณค่ะ"
+                    class="w-full min-h-[44px] px-3.5 py-2 text-[16px] rounded-xl border border-slate-200 bg-white focus:border-pinkMid focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                id="emailSubmitBtn"
+                class="w-full min-h-[44px] rounded-xl bg-pinkDeep text-white font-semibold text-sm hover:opacity-95 active:scale-[0.99] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                + บันทึกรายการอีเมล
+              </button>
+            </form>
+
+            <!-- รายการอีเมลในหลังบ้าน -->
+            <div class="space-y-2">
+              <div class="flex items-center justify-between">
+                <h4 class="text-xs font-semibold text-slate-500">รายการทั้งหมด (<span id="adminEmailCount">0</span>)</h4>
+                <span class="text-[11px] text-slate-400">กด ↻ เพื่อสลับสถานะด่วน</span>
+              </div>
+              <div id="adminEmailList" class="space-y-2"></div>
+            </div>
+          </div>
+
+          <!-- TAB 2: แบนเนอร์และข้อความวิ่ง -->
+          <div id="adminTab-banner" class="hidden">
+            <form onsubmit="saveBannerSettings(event)" class="space-y-3.5">
+              <div>
+                <label for="cfgMarqueeText" class="block text-xs font-medium text-slate-600 mb-1">ข้อความวิ่งเหนือแบนเนอร์</label>
+                <textarea
+                  id="cfgMarqueeText"
+                  rows="3"
+                  class="w-full px-3.5 py-2.5 text-[16px] rounded-xl border border-slate-200 bg-white focus:border-pinkMid focus:outline-none"
+                ></textarea>
+              </div>
+
+              <div>
+                <label for="cfgBannerUrl" class="block text-xs font-medium text-slate-600 mb-1">ลิงก์รูปภาพแบนเนอร์ (URL)</label>
+                <input
+                  id="cfgBannerUrl"
+                  type="url"
+                  class="w-full min-h-[44px] px-3.5 py-2 text-[16px] rounded-xl border border-slate-200 bg-white focus:border-pinkMid focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label for="cfgBillingTitle" class="block text-xs font-medium text-slate-600 mb-1">หัวข้อตารางรอบบิล</label>
+                <input
+                  id="cfgBillingTitle"
+                  type="text"
+                  class="w-full min-h-[44px] px-3.5 py-2 text-[16px] rounded-xl border border-slate-200 bg-white focus:border-pinkMid focus:outline-none"
+                />
+              </div>
+
+              <button
+                id="bannerSubmitBtn"
+                type="submit"
+                class="w-full min-h-[46px] rounded-xl bg-blueDeep text-white font-semibold text-sm hover:opacity-95 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                บันทึกแบนเนอร์และข้อความวิ่ง
+              </button>
+            </form>
+          </div>
+
+          <!-- TAB 3: ตั้งค่าร้านและช่องทางติดต่อ -->
+          <div id="adminTab-store" class="hidden space-y-4">
+            <form onsubmit="saveStoreSettings(event)" class="space-y-3">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label for="cfgStoreName" class="block text-xs font-medium text-slate-600 mb-1">ชื่อร้าน</label>
+                  <input id="cfgStoreName" type="text" class="w-full min-h-[44px] px-3.5 py-2 text-[16px] rounded-xl border border-slate-200 focus:border-pinkMid focus:outline-none" />
+                </div>
+                <div>
+                  <label for="cfgSubtitle" class="block text-xs font-medium text-slate-600 mb-1">คำอธิบายใต้ชื่อร้าน</label>
+                  <input id="cfgSubtitle" type="text" class="w-full min-h-[44px] px-3.5 py-2 text-[16px] rounded-xl border border-slate-200 focus:border-pinkMid focus:outline-none" />
+                </div>
+              </div>
+
+              <div>
+                <label for="cfgLogoUrl" class="block text-xs font-medium text-slate-600 mb-1">ลิงก์รูปโลโก้ (URL)</label>
+                <input id="cfgLogoUrl" type="url" class="w-full min-h-[44px] px-3.5 py-2 text-[16px] rounded-xl border border-slate-200 focus:border-pinkMid focus:outline-none" />
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label for="cfgContactLine" class="block text-xs font-medium text-slate-600 mb-1">ลิงก์ Line แก้ปัญหายู</label>
+                  <input id="cfgContactLine" type="text" class="w-full min-h-[44px] px-3.5 py-2 text-[16px] rounded-xl border border-slate-200 focus:border-pinkMid focus:outline-none" />
+                </div>
+                <div>
+                  <label for="cfgContactIg" class="block text-xs font-medium text-slate-600 mb-1">ลิงก์ Facebook</label>
+                  <input id="cfgContactIg" type="text" class="w-full min-h-[44px] px-3.5 py-2 text-[16px] rounded-xl border border-slate-200 focus:border-pinkMid focus:outline-none" />
+                </div>
+              </div>
+
+              <div>
+                <label for="cfgContactUrl" class="block text-xs font-medium text-slate-600 mb-1">ลิงก์ปุ่มทักแชท Line แก้ปัญหายู</label>
+                <input id="cfgContactUrl" type="url" class="w-full min-h-[44px] px-3.5 py-2 text-[16px] rounded-xl border border-slate-200 focus:border-pinkMid focus:outline-none" />
+              </div>
+
+              <div>
+                <label for="cfgContactHours" class="block text-xs font-medium text-slate-600 mb-1">เวลาทำการ</label>
+                <input id="cfgContactHours" type="text" class="w-full min-h-[44px] px-3.5 py-2 text-[16px] rounded-xl border border-slate-200 focus:border-pinkMid focus:outline-none" />
+              </div>
+
+              <div>
+                <label for="cfgOpenChatName" class="block text-xs font-medium text-slate-600 mb-1">ชื่อกลุ่ม OpenChat</label>
+                <input id="cfgOpenChatName" type="text" class="w-full min-h-[44px] px-3.5 py-2 text-[16px] rounded-xl border border-slate-200 focus:border-pinkMid focus:outline-none" />
+              </div>
+
+              <div>
+                <label for="cfgOpenChatUrl" class="block text-xs font-medium text-slate-600 mb-1">ลิงก์กลุ่ม OpenChat</label>
+                <input id="cfgOpenChatUrl" type="url" class="w-full min-h-[44px] px-3.5 py-2 text-[16px] rounded-xl border border-slate-200 focus:border-pinkMid focus:outline-none" />
+              </div>
+
+              <button
+                id="storeSubmitBtn"
+                type="submit"
+                class="w-full min-h-[46px] rounded-xl bg-pinkDeep text-white font-semibold text-sm hover:opacity-95 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                บันทึกข้อมูลร้านและช่องทางติดต่อ
+              </button>
+            </form>
+
+            <div class="pt-2 border-t border-slate-100 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onclick="fetchAllData(true)"
+                class="min-h-[42px] rounded-xl bg-blueSoft/40 hover:bg-blueSoft/70 text-blueDeep text-xs font-medium border border-blueSoft"
+              >
+                รีเฟรชข้อมูลล่าสุด
+              </button>
+              <button
+                type="button"
+                onclick="handleAdminLogout()"
+                class="min-h-[42px] rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-medium border border-rose-200"
+              >
+                ออกจากระบบแอดมิน
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       MODAL 5: กล่องยืนยันการทำงาน (ใช้แทน confirm())
+       ========================================================= -->
+  <div id="confirmModal" class="hidden fixed inset-0 z-[60] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4" onclick="if(event.target===this) closeConfirmModal()">
+    <div class="animate-pop w-full max-w-xs rounded-3xl bg-white border-2 border-pinkSoft shadow-2xl p-5 space-y-4 text-center">
+      <div class="text-2xl">🎀</div>
+      <div class="space-y-1">
+        <h4 id="confirmTitle" class="text-base font-bold text-slate-800"></h4>
+        <p id="confirmMessage" class="text-xs text-slate-500 leading-relaxed"></p>
+      </div>
+      <div class="grid grid-cols-2 gap-2.5">
+        <button type="button" onclick="closeConfirmModal()" class="min-h-[42px] rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-medium">
+          ยกเลิก
+        </button>
+        <button id="confirmOkBtn" type="button" class="min-h-[42px] rounded-xl bg-pinkDeep text-white text-sm font-medium hover:opacity-95">
+          ยืนยัน
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast แจ้งเตือนมุมล่าง -->
+  <div id="toast" class="pointer-events-none fixed bottom-6 left-1/2 -translate-x-1/2 z-[70] opacity-0 translate-y-3 transition-all duration-200">
+    <div id="toastMessage" class="px-4 py-2.5 rounded-full bg-slate-800/95 text-white text-xs font-medium shadow-lg whitespace-nowrap"></div>
+  </div>
+
+  <!-- =========================================================
+       JAVASCRIPT: เชื่อมต่อ Supabase จริง (หน้าบ้าน + หลังบ้านแอดมิน)
+       ========================================================= -->
+  <script>
+    // ค่าการเชื่อมต่อ Supabase ของโปรเจกต์ LetiO (ใช้เฉพาะ URL และ Publishable Key)
+    const SUPABASE_URL = 'https://keurceavklpranifchpe.supabase.co';
+    const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_CLacRdVRVqNEMqxFPBIsWA_W6JBXc3S';
+
+    // สร้าง Supabase Client อย่างปลอดภัย (รองรับทั้งเบราว์เซอร์ปกติและหน้าต่าง Preview บน iPad Safari)
+    function createSafeSupabaseClient() {
+      if (!window.supabase) return null;
+
+      let canUseStorage = false;
+      let isInIframe = false;
+      try {
+        isInIframe = window.self !== window.top;
+      } catch (e) {
+        isInIframe = true;
+      }
+
+      try {
+        const testKey = '__sb_auth_test__';
+        window.localStorage.setItem(testKey, '1');
+        window.localStorage.removeItem(testKey);
+        canUseStorage = Boolean(window.location && window.location.origin && window.location.origin !== 'null');
+      } catch (e) {
+        canUseStorage = false;
+      }
+
+      try {
+        if (canUseStorage && !isInIframe) {
+          return window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+        }
+
+        const memoryStore = {};
+        const memoryStorage = {
+          getItem: (key) => (Object.prototype.hasOwnProperty.call(memoryStore, key) ? memoryStore[key] : null),
+          setItem: (key, value) => { memoryStore[key] = String(value); },
+          removeItem: (key) => { delete memoryStore[key]; }
+        };
+
+        return window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+          auth: {
+            storage: memoryStorage,
+            persistSession: true,
+            autoRefreshToken: false,
+            detectSessionInUrl: false,
+            lock: async (_name, _acquireTimeout, fn) => await fn()
+          }
+        });
+      } catch (err) {
+        console.error('Supabase createClient error:', err);
+        return null;
+      }
+    }
+
+    const supabaseClient = createSafeSupabaseClient();
+
+    // ลำดับสถานะสำหรับปุ่มสลับสถานะด่วน
+    const STATUS_OPTIONS = [
+      'ชำระเงินแล้ว',
+      'ยืนยันการชำระเงิน',
+      'รอชำระเงิน',
+      'รอตรวจสอบ'
+    ];
+
+    // ค่าสำรองเฉพาะกรณีที่ยังโหลดตั้งค่าร้านไม่เสร็จ (จะถูกแทนที่ด้วยข้อมูลจริงจาก Supabase ทันที)
+    const FALLBACK_SETTINGS = {
+      storeName: 'LetiO',
+      subtitle: 'เช็กสถานะเมลยูทูป',
+      logoUrl: 'https://i.postimg.cc/qvNS6h23/IMG-9596.jpg',
+      bannerUrl: 'https://i.postimg.cc/CKD2J3v2/IMG-9597.jpg',
+      marqueeText: '✨ ยินดีต้อนรับสู่ร้าน LetiO 🎀 เช็กสถานะเมลยูทูปได้ตลอด 24 ชม. 💌',
+      billingTitle: 'กำหนดชำระรอบบิลวันนี้',
+      contactLine: 'https://lin.ee/X9eHpJC',
+      contactIg: 'https://www.facebook.com/share/1EuYiDiQbD/?mibextid=wwXIfr',
+      contactUrl: 'https://lin.ee/X9eHpJC',
+      contactHours: 'เปิดบริการทุกวัน 09:00 - 23:00 น.',
+      openChatName: 'LetiO แจ้งเตือนรอบบิล & โปรโมชัน',
+      openChatUrl: 'https://line.me/ti/g2/e-CmUP8Qlj2RmMNX4QbgL9LlC_PrN0EzN03ceA?utm_source=invitation&utm_medium=link_copy&utm_campaign=default'
+    };
+
+    // สถานะข้อมูลหลักในหน่วยความจำ (ดึงจาก Supabase จริง ไม่มีข้อมูล Demo อีเมลปะปน)
+    const appState = {
+      settings: { ...FALLBACK_SETTINGS },
+      emails: []
+    };
+
+    let isLoadingData = true;
+    let loadErrorMessage = '';
+    let loadErrorDetail = '';
+    let isSubmitting = false;
+    let currentSearch = '';
+    let currentFilter = 'all';
+    let currentAdminTab = 'emails';
+    let currentAdminUser = null;
+    let isAuthorizedAdmin = false;
+    let confirmCallback = null;
+    let toastTimer = null;
+
+    // ป้องกัน XSS เมื่อนำข้อความไปแสดงใน HTML
+    function escapeHtml(str) {
+      return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    // แปลงข้อมูลจากคอลัมน์ใน Supabase (snake_case) เป็นรูปแบบใช้งานในหน้าเว็บ
+    function mapSettingsFromDb(row) {
+      if (!row) return { ...FALLBACK_SETTINGS };
+      return {
+        storeName: row.store_name ?? FALLBACK_SETTINGS.storeName,
+        subtitle: row.subtitle ?? FALLBACK_SETTINGS.subtitle,
+        logoUrl: row.logo_url ?? FALLBACK_SETTINGS.logoUrl,
+        bannerUrl: row.banner_url ?? FALLBACK_SETTINGS.bannerUrl,
+        marqueeText: row.marquee_text ?? FALLBACK_SETTINGS.marqueeText,
+        billingTitle: row.billing_title ?? FALLBACK_SETTINGS.billingTitle,
+        contactLine: row.contact_line ?? FALLBACK_SETTINGS.contactLine,
+        contactIg: row.contact_ig ?? FALLBACK_SETTINGS.contactIg,
+        contactUrl: row.contact_url ?? FALLBACK_SETTINGS.contactUrl,
+        contactHours: row.contact_hours ?? FALLBACK_SETTINGS.contactHours,
+        openChatName: row.open_chat_name ?? FALLBACK_SETTINGS.openChatName,
+        openChatUrl: row.open_chat_url ?? FALLBACK_SETTINGS.openChatUrl
+      };
+    }
+
+    // สร้างป้ายสถานะสีพาสเทลพร้อมลูกเล่นไล่เฉด เงาละมุน และจุดกระพริบ
+    function getStatusBadgeHtml(status) {
+      const styles = {
+        'ชำระเงินแล้ว': {
+          wrap: 'bg-gradient-to-r from-emerald-100 via-teal-50 to-emerald-100 text-emerald-700 border-emerald-300/80 shadow-[0_3px_10px_-3px_rgba(16,185,129,0.35)]',
+          dot: 'bg-emerald-500',
+          ping: 'bg-emerald-400',
+          icon: '✨'
+        },
+        'ยืนยันการชำระเงิน': {
+          wrap: 'bg-gradient-to-r from-sky-100 via-blue-50 to-indigo-100/90 text-sky-700 border-sky-300/80 shadow-[0_3px_10px_-3px_rgba(56,189,248,0.38)]',
+          dot: 'bg-sky-500',
+          ping: 'bg-sky-400',
+          icon: '💎'
+        },
+        'รอชำระเงิน': {
+          wrap: 'bg-gradient-to-r from-rose-100 via-pink-50 to-rose-100 text-rose-600 border-rose-300/80 shadow-[0_3px_10px_-3px_rgba(244,63,94,0.32)]',
+          dot: 'bg-rose-500',
+          ping: 'bg-rose-400',
+          icon: '🔔'
+        },
+        'รอตรวจสอบ': {
+          wrap: 'bg-gradient-to-r from-amber-100 via-yellow-50 to-orange-100/80 text-amber-700 border-amber-300/80 shadow-[0_3px_10px_-3px_rgba(245,158,11,0.34)]',
+          dot: 'bg-amber-500',
+          ping: 'bg-amber-400',
+          icon: '⏳'
+        }
+      };
+      const cfg = styles[status] || {
+        wrap: 'bg-slate-100 text-slate-600 border-slate-200',
+        dot: 'bg-slate-400',
+        ping: 'bg-slate-300',
+        icon: ''
+      };
+      return `
+        <span class="status-badge inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border whitespace-nowrap ${cfg.wrap}">
+          <span class="status-dot-wrap">
+            <span class="status-dot-ping ${cfg.ping}"></span>
+            <span class="relative inline-flex rounded-full w-[7px] h-[7px] ${cfg.dot}"></span>
+          </span>
+          <span>${escapeHtml(status)}</span>
+          ${cfg.icon ? `<span class="text-[10px] leading-none" aria-hidden="true">${cfg.icon}</span>` : ''}
+        </span>
+      `;
+    }
+
+    // แสดงวันที่ปัจจุบันเป็นภาษาไทย
+    function renderTodayDate() {
+      const now = new Date();
+      const thaiDate = now.toLocaleDateString('th-TH', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      });
+      document.getElementById('todayDateLabel').textContent = `อัปเดตประจำ${thaiDate}`;
+      document.getElementById('footerYear').textContent = now.getFullYear();
+    }
+
+    // ดึงข้อมูลตั้งค่าร้านและรายการอีเมลทั้งหมดจาก Supabase จริง
+    async function fetchAllData(showRefreshToast = false) {
+      if (!supabaseClient) {
+        isLoadingData = false;
+        loadErrorMessage = 'ไม่สามารถโหลดไลบรารีเชื่อมต่อฐานข้อมูลได้';
+        loadErrorDetail = 'กรุณาตรวจสอบอินเทอร์เน็ตหรือเปิดผ่าน Safari/Chrome แล้วลองใหม่';
+        renderFrontend();
+        return;
+      }
+
+      isLoadingData = true;
+      loadErrorMessage = '';
+      loadErrorDetail = '';
+      renderEmailTable();
+
+      try {
+        const [settingsRes, emailsRes] = await Promise.all([
+          supabaseClient
+            .from('store_settings')
+            .select('*')
+            .eq('id', 1)
+            .maybeSingle(),
+          supabaseClient
+            .from('email_statuses')
+            .select('*')
+            .order('created_at', { ascending: false })
+        ]);
+
+        if (settingsRes.error) throw settingsRes.error;
+        if (emailsRes.error) throw emailsRes.error;
+
+        if (settingsRes.data) {
+          appState.settings = mapSettingsFromDb(settingsRes.data);
+        }
+        appState.emails = Array.isArray(emailsRes.data) ? emailsRes.data : [];
+        isLoadingData = false;
+        loadErrorMessage = '';
+        loadErrorDetail = '';
+
+        renderFrontend();
+        if (isAuthorizedAdmin) {
+          populateAdminForms();
+          renderAdminEmailList();
+        }
+        if (showRefreshToast) {
+          showToast('โหลดข้อมูลล่าสุดจากฐานข้อมูลแล้ว');
+        }
+      } catch (err) {
+        console.error('Supabase fetch error:', err);
+        isLoadingData = false;
+        loadErrorMessage = 'เชื่อมต่อฐานข้อมูลไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ตแล้วกดลองโหลดใหม่';
+        loadErrorDetail = err && err.message ? err.message : '';
+        renderEmailTable();
+        if (showRefreshToast) {
+          showToast('ไม่สามารถโหลดข้อมูลได้ กรุณาลองใหม่อีกครั้ง');
+        }
+      }
+    }
+
+    // อัปเดตหน้าบ้านทั้งหมด
+    function renderFrontend() {
+      const s = appState.settings;
+      document.getElementById('headerStoreName').textContent = s.storeName || 'LetiO';
+      document.getElementById('headerSubtitle').textContent = s.subtitle || 'เช็กสถานะเมลยูทูป';
+      document.getElementById('footerStoreName').textContent = s.storeName || 'LetiO';
+      document.getElementById('billingTitle').textContent = s.billingTitle || 'กำหนดชำระรอบบิลวันนี้';
+
+      const logoEl = document.getElementById('headerLogo');
+      if (s.logoUrl) logoEl.src = s.logoUrl;
+
+      const bannerEl = document.getElementById('bannerImage');
+      if (bannerEl && s.bannerUrl) bannerEl.src = s.bannerUrl;
+
+      const marquee = s.marqueeText || FALLBACK_SETTINGS.marqueeText;
+      const marqueePrimaryEl = document.getElementById('marqueeTextPrimary');
+      const marqueeCloneEl = document.getElementById('marqueeTextClone');
+      if (marqueePrimaryEl) marqueePrimaryEl.textContent = marquee;
+      if (marqueeCloneEl) marqueeCloneEl.textContent = marquee;
+
+      renderEmailTable();
+    }
+
+    // อัปเดตตารางอีเมลและการ์ดสรุปผลค้นหา
+    function renderEmailTable() {
+      const listEl = document.getElementById('emailListContainer');
+      const loadingEl = document.getElementById('loadingState');
+      const errorEl = document.getElementById('errorState');
+      const errorTextEl = document.getElementById('errorStateText');
+      const errorDetailEl = document.getElementById('errorStateDetail');
+      const emptyEl = document.getElementById('emptyState');
+      const emptyTitleEl = document.getElementById('emptyStateTitle');
+      const emptyDescEl = document.getElementById('emptyStateDesc');
+      const summaryEl = document.getElementById('searchSummaryCard');
+
+      if (isLoadingData) {
+        listEl.innerHTML = '';
+        loadingEl.classList.remove('hidden');
+        errorEl.classList.add('hidden');
+        emptyEl.classList.add('hidden');
+        summaryEl.classList.add('hidden');
+        return;
+      }
+
+      loadingEl.classList.add('hidden');
+
+      if (loadErrorMessage) {
+        listEl.innerHTML = '';
+        errorTextEl.textContent = loadErrorMessage;
+        if (loadErrorDetail) {
+          errorDetailEl.textContent = `สาเหตุ: ${loadErrorDetail}`;
+          errorDetailEl.classList.remove('hidden');
+        } else {
+          errorDetailEl.classList.add('hidden');
+        }
+        errorEl.classList.remove('hidden');
+        emptyEl.classList.add('hidden');
+        summaryEl.classList.add('hidden');
+        return;
+      }
+
+      errorEl.classList.add('hidden');
+
+      const q = currentSearch.trim().toLowerCase();
+      const filtered = appState.emails.filter(item => {
+        const matchFilter = currentFilter === 'all' || item.status === currentFilter;
+        const matchSearch = !q || (item.email || '').toLowerCase().includes(q);
+        return matchFilter && matchSearch;
+      });
+
+      if (filtered.length === 0) {
+        listEl.innerHTML = '';
+        if (appState.emails.length === 0 && !q) {
+          emptyTitleEl.textContent = 'ยังไม่มีรายการอีเมลในรอบบิลวันนี้';
+          emptyDescEl.textContent = 'แอดมินสามารถเพิ่มรายการได้ที่ปุ่มฟันเฟืองมุมขวาบน';
+        } else {
+          emptyTitleEl.textContent = 'ไม่พบอีเมลที่ค้นหา';
+          emptyDescEl.textContent = 'ลองตรวจสอบตัวสะกดหรือติดต่อแอดมินได้เลยนะคะ';
+        }
+        emptyEl.classList.remove('hidden');
+      } else {
+        emptyEl.classList.add('hidden');
+        listEl.innerHTML = filtered.map(item => `
+          <button
+            type="button"
+            onclick="openDetailModal('${escapeHtml(item.id)}')"
+            class="w-full min-h-[52px] grid grid-cols-12 items-center gap-2 px-3.5 py-2.5 text-left hover:bg-pinkSoft/15 active:bg-pinkSoft/25 transition-colors focus:outline-none"
+          >
+            <div class="col-span-7 text-xs sm:text-sm font-medium text-slate-700 truncate">
+              ${escapeHtml(item.email)}
+            </div>
+            <div class="col-span-5 flex justify-end">
+              ${getStatusBadgeHtml(item.status)}
+            </div>
+          </button>
+        `).join('');
+      }
+
+      // การ์ดสรุปผลค้นหาแบบทันที (แสดงข้อมูลครบทุกช่องที่กรอกหลังบ้านอย่างเป็นระเบียบ)
+      if (!q) {
+        summaryEl.classList.add('hidden');
+        summaryEl.innerHTML = '';
+        return;
+      }
+
+      summaryEl.classList.remove('hidden');
+      if (filtered.length >= 1) {
+        const headerHtml = filtered.length > 1
+          ? `<div class="flex items-center justify-between px-1 pb-1.5 text-[11px] font-medium text-slate-500">
+               <span>พบข้อมูลที่ตรงกับคำค้นหา <strong class="text-pinkDeep">${filtered.length}</strong> รายการ</span>
+               <span>เลื่อนดูได้ค่ะ</span>
+             </div>`
+          : '';
+
+        const cardsHtml = filtered.map(hit => `
+          <div class="rounded-2xl bg-white/95 border border-pinkSoft/80 p-3.5 shadow-sm space-y-2.5">
+            <!-- แถวบน: อีเมล + ป้ายสถานะ -->
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <span class="text-[10px] font-medium text-pinkDeep/80 block">📧 อีเมลยูทูป</span>
+                <p class="text-xs sm:text-sm font-bold text-slate-800 break-all leading-snug">${escapeHtml(hit.email)}</p>
+              </div>
+              <div class="shrink-0 pt-0.5">${getStatusBadgeHtml(hit.status)}</div>
+            </div>
+
+            <!-- ตารางข้อมูล 3 ช่อง: หัวแฟม / วันที่ซื้อ / วันหมดอายุ -->
+            <div class="grid grid-cols-3 gap-1.5 pt-2 border-t border-pinkSoft/40 text-center">
+              <div class="rounded-xl bg-pinkSoft/20 border border-pinkSoft/50 px-2 py-1.5">
+                <span class="block text-[10px] text-slate-400">👑 หัวแฟม</span>
+                <span class="block text-[11px] font-semibold text-slate-700 truncate mt-0.5">${escapeHtml(hit.family_head || '-')}</span>
+              </div>
+              <div class="rounded-xl bg-blueSoft/25 border border-blueSoft/60 px-2 py-1.5">
+                <span class="block text-[10px] text-slate-400">🛒 วันที่ซื้อ</span>
+                <span class="block text-[11px] font-semibold text-slate-700 truncate mt-0.5">${escapeHtml(hit.purchase_date || '-')}</span>
+              </div>
+              <div class="rounded-xl bg-yellowBg border border-yellowSoft px-2 py-1.5">
+                <span class="block text-[10px] text-slate-400">📅 วันหมดอายุ</span>
+                <span class="block text-[11px] font-semibold text-pinkDeep truncate mt-0.5">${escapeHtml(hit.cycle || '-')}</span>
+              </div>
+            </div>
+
+            <!-- หมายเหตุจากร้าน -->
+            <div class="rounded-xl bg-slate-50/90 border border-slate-100 px-3 py-2 flex items-start gap-1.5 text-[11px]">
+              <span class="shrink-0 text-slate-400">📝 หมายเหตุ:</span>
+              <span class="text-slate-600 leading-relaxed break-words">${escapeHtml(hit.note || 'ไม่มีหมายเหตุเพิ่มเติม')}</span>
+            </div>
+          </div>
+        `).join('');
+
+        summaryEl.className = 'rounded-2xl p-2.5 border-2 border-blueSoft/80 bg-gradient-to-br from-pinkSoft/20 via-yellowBg/50 to-blueSoft/25 shadow-soft';
+        summaryEl.innerHTML = `
+          ${headerHtml}
+          <div class="space-y-2.5 ${filtered.length > 1 ? 'max-h-[300px] overflow-y-auto pastel-scrollbar pr-0.5' : ''}">
+            ${cardsHtml}
+          </div>
+        `;
+      } else {
+        summaryEl.className = 'rounded-2xl p-3 border border-rose-200 bg-rose-50 text-xs text-rose-600';
+        summaryEl.innerHTML = `ไม่พบอีเมล "<strong>${escapeHtml(currentSearch)}</strong>" ในรอบบิลวันนี้ค่ะ`;
+      }
+    }
+
+    // ค้นหาแบบ Real-time
+    function handleSearchInput(val) {
+      currentSearch = val;
+      const clearBtn = document.getElementById('clearSearchBtn');
+      if (val.length > 0) {
+        clearBtn.classList.remove('hidden');
+        clearBtn.classList.add('flex');
+      } else {
+        clearBtn.classList.add('hidden');
+        clearBtn.classList.remove('flex');
+      }
+      renderEmailTable();
+    }
+
+    function clearSearch() {
+      const input = document.getElementById('searchInput');
+      input.value = '';
+      handleSearchInput('');
+      input.focus();
+    }
+
+    function setStatusFilter(status) {
+      currentFilter = status;
+      renderEmailTable();
+    }
+
+    // ==================== MODAL รายละเอียดอีเมล ====================
+    function openDetailModal(id) {
+      const item = appState.emails.find(e => e.id === id);
+      if (!item) return;
+      document.getElementById('detailEmail').textContent = item.email;
+      document.getElementById('detailStatusBadge').innerHTML = getStatusBadgeHtml(item.status);
+      document.getElementById('detailFamilyHead').textContent = item.family_head || '-';
+      document.getElementById('detailPurchaseDate').textContent = item.purchase_date || '-';
+      document.getElementById('detailCycle').textContent = item.cycle || '-';
+      document.getElementById('detailNote').textContent = item.note || 'ไม่มีหมายเหตุเพิ่มเติม';
+      document.getElementById('detailModal').classList.remove('hidden');
+    }
+
+    function closeDetailModal() {
+      document.getElementById('detailModal').classList.add('hidden');
+    }
+
+    // ==================== MODAL ติดต่อ & OPENCHAT ====================
+    function openContactModal() {
+      const s = appState.settings;
+      document.getElementById('contactLineText').textContent = s.contactLine || '-';
+      document.getElementById('contactIgText').textContent = s.contactIg || '-';
+      document.getElementById('contactHoursText').textContent = s.contactHours || '';
+      document.getElementById('contactFbLink').href = s.contactIg || '#';
+      document.getElementById('contactActionLink').href = s.contactUrl || s.contactLine || '#';
+      document.getElementById('contactModal').classList.remove('hidden');
+    }
+
+    function closeContactModal() {
+      document.getElementById('contactModal').classList.add('hidden');
+    }
+
+    function openOpenChatModal() {
+      const s = appState.settings;
+      document.getElementById('openChatNameText').textContent = s.openChatName || 'LINE OpenChat';
+      document.getElementById('openChatUrlPreview').textContent = s.openChatUrl || '-';
+      document.getElementById('openChatJoinLink').href = s.openChatUrl || '#';
+      document.getElementById('openChatModal').classList.remove('hidden');
+    }
+
+    function closeOpenChatModal() {
+      document.getElementById('openChatModal').classList.add('hidden');
+    }
+
+    // คัดลอกข้อความด้วย execCommand (รองรับ iFrame)
+    function copyText(text, successMsg) {
+      try {
+        const temp = document.createElement('textarea');
+        temp.value = text || '';
+        temp.setAttribute('readonly', '');
+        temp.style.position = 'fixed';
+        temp.style.opacity = '0';
+        document.body.appendChild(temp);
+        temp.select();
+        document.execCommand('copy');
+        document.body.removeChild(temp);
+        showToast(successMsg || 'คัดลอกเรียบร้อยแล้ว');
+      } catch (err) {
+        showToast('ไม่สามารถคัดลอกได้ กรุณาคัดลอกด้วยตนเอง');
+      }
+    }
+
+    // ==================== ระบบยืนยันตัวตนแอดมิน (Supabase Auth + admin_users) ====================
+    async function verifyAdminSession() {
+      if (!supabaseClient) {
+        currentAdminUser = null;
+        isAuthorizedAdmin = false;
+        updateAdminAuthUI();
+        return false;
+      }
+
+      try {
+        const { data: { session }, error } = await supabaseClient.auth.getSession();
+        if (error || !session || !session.user) {
+          currentAdminUser = null;
+          isAuthorizedAdmin = false;
+          updateAdminAuthUI();
+          return false;
+        }
+
+        const { data: adminRow, error: adminErr } = await supabaseClient
+          .from('admin_users')
+          .select('user_id')
+          .eq('user_id', session.user.id)
+          .maybeSingle();
+
+        if (adminErr || !adminRow) {
+          currentAdminUser = session.user;
+          isAuthorizedAdmin = false;
+          updateAdminAuthUI(`บัญชีนี้ (${session.user.id}) ไม่มีสิทธิ์ผู้ดูแลระบบในตาราง admin_users`);
+          return false;
+        }
+
+        currentAdminUser = session.user;
+        isAuthorizedAdmin = true;
+        updateAdminAuthUI();
+        return true;
+      } catch (err) {
+        console.error('Verify admin session error:', err);
+        currentAdminUser = null;
+        isAuthorizedAdmin = false;
+        updateAdminAuthUI(`ตรวจสอบสิทธิ์แอดมินไม่สำเร็จ: ${err && err.message ? err.message : 'กรุณาลองใหม่'}`);
+        return false;
+      }
+    }
+
+    function updateAdminAuthUI(loginErrorText = '') {
+      const loginView = document.getElementById('adminLoginView');
+      const workspace = document.getElementById('adminWorkspace');
+      const headerSub = document.getElementById('adminHeaderSub');
+      const logoutBtn = document.getElementById('adminLogoutHeaderBtn');
+      const errBox = document.getElementById('adminLoginError');
+
+      if (isAuthorizedAdmin && currentAdminUser) {
+        loginView.classList.add('hidden');
+        workspace.classList.remove('hidden');
+        logoutBtn.classList.remove('hidden');
+        headerSub.textContent = `เข้าสู่ระบบแล้ว: ${currentAdminUser.email || 'แอดมิน'}`;
+        errBox.classList.add('hidden');
+        errBox.textContent = '';
+        populateAdminForms();
+        renderAdminEmailList();
+        switchAdminTab(currentAdminTab);
+      } else {
+        loginView.classList.remove('hidden');
+        workspace.classList.add('hidden');
+        logoutBtn.classList.toggle('hidden', !currentAdminUser);
+        headerSub.textContent = 'กรุณาเข้าสู่ระบบด้วยบัญชีแอดมิน';
+        if (loginErrorText) {
+          errBox.textContent = loginErrorText;
+          errBox.classList.remove('hidden');
+        } else {
+          errBox.classList.add('hidden');
+          errBox.textContent = '';
+        }
+      }
+    }
+
+    async function handleAdminLogin(e) {
+      e.preventDefault();
+      if (isSubmitting) return;
+
+      const errBox = document.getElementById('adminLoginError');
+      if (!supabaseClient) {
+        errBox.textContent = 'ไม่พบตัวเชื่อมต่อ Supabase กรุณารีเฟรชหน้าเว็บแล้วลองใหม่';
+        errBox.classList.remove('hidden');
+        return;
+      }
+
+      const email = document.getElementById('loginEmail').value.trim();
+      const password = document.getElementById('loginPassword').value;
+      const btn = document.getElementById('adminLoginSubmitBtn');
+
+      if (!email || !password) return;
+
+      isSubmitting = true;
+      btn.disabled = true;
+      btn.textContent = 'กำลังตรวจสอบบัญชี...';
+      errBox.classList.add('hidden');
+
+      try {
+        const { error } = await supabaseClient.auth.signInWithPassword({
+          email,
+          password
+        });
+
+        if (error) {
+          const msg = error.message || '';
+          if (msg.toLowerCase().includes('email not confirmed')) {
+            errBox.textContent = 'บัญชีนี้ยังไม่ได้ยืนยันอีเมลใน Supabase (ไปที่ Authentication > Users > กดจุดสามจุดหลังอีเมลแล้วเลือก Confirm user)';
+          } else if (msg.toLowerCase().includes('invalid login credentials')) {
+            errBox.textContent = 'อีเมลหรือรหัสผ่านไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง';
+          } else {
+            errBox.textContent = `เข้าสู่ระบบไม่สำเร็จ: ${msg}`;
+          }
+          errBox.classList.remove('hidden');
+          return;
+        }
+
+        const allowed = await verifyAdminSession();
+        if (!allowed) {
+          await supabaseClient.auth.signOut();
+          currentAdminUser = null;
+          isAuthorizedAdmin = false;
+          updateAdminAuthUI('บัญชีนี้ไม่มีสิทธิ์แอดมิน (UID ไม่ตรงกับตาราง admin_users)');
+          return;
+        }
+
+        document.getElementById('loginPassword').value = '';
+        showToast('เข้าสู่ระบบแอดมินเรียบร้อยแล้ว');
+        await fetchAllData(false);
+      } catch (err) {
+        console.error('Login error:', err);
+        errBox.textContent = `เกิดข้อผิดพลาดในการเชื่อมต่อ: ${err && err.message ? err.message : 'กรุณาตรวจสอบอินเทอร์เน็ต'}`;
+        errBox.classList.remove('hidden');
+      } finally {
+        isSubmitting = false;
+        btn.disabled = false;
+        btn.textContent = 'เข้าสู่ระบบแอดมิน';
+      }
+    }
+
+    async function handleAdminLogout() {
+      if (!supabaseClient) return;
+      try {
+        await supabaseClient.auth.signOut();
+      } catch (err) {
+        console.error('Logout error:', err);
+      } finally {
+        currentAdminUser = null;
+        isAuthorizedAdmin = false;
+        resetEmailForm();
+        updateAdminAuthUI();
+        showToast('ออกจากระบบแอดมินแล้ว');
+      }
+    }
+
+    // ==================== MODAL หลังบ้านแอดมิน ====================
+    async function openAdminModal() {
+      document.getElementById('adminModal').classList.remove('hidden');
+      await verifyAdminSession();
+    }
+
+    function closeAdminModal() {
+      document.getElementById('adminModal').classList.add('hidden');
+      resetEmailForm();
+    }
+
+    function switchAdminTab(tabName) {
+      currentAdminTab = tabName;
+      ['emails', 'banner', 'store'].forEach(t => {
+        const panel = document.getElementById(`adminTab-${t}`);
+        if (panel) panel.classList.toggle('hidden', t !== tabName);
+      });
+      document.querySelectorAll('.admin-tab-btn').forEach(btn => {
+        const active = btn.dataset.adminTab === tabName;
+        btn.className = `admin-tab-btn min-h-[42px] rounded-xl text-xs font-semibold transition-all ${
+          active
+            ? 'bg-pinkDeep text-white shadow-sm'
+            : 'bg-white text-slate-500 border border-slate-200 hover:bg-pinkSoft/30'
+        }`;
+      });
+    }
+
+    function populateAdminForms() {
+      const s = appState.settings;
+      document.getElementById('cfgMarqueeText').value = s.marqueeText || '';
+      document.getElementById('cfgBannerUrl').value = s.bannerUrl || '';
+      document.getElementById('cfgBillingTitle').value = s.billingTitle || '';
+
+      document.getElementById('cfgStoreName').value = s.storeName || '';
+      document.getElementById('cfgSubtitle').value = s.subtitle || '';
+      document.getElementById('cfgLogoUrl').value = s.logoUrl || '';
+      document.getElementById('cfgContactLine').value = s.contactLine || '';
+      document.getElementById('cfgContactIg').value = s.contactIg || '';
+      document.getElementById('cfgContactUrl').value = s.contactUrl || '';
+      document.getElementById('cfgContactHours').value = s.contactHours || '';
+      document.getElementById('cfgOpenChatName').value = s.openChatName || '';
+      document.getElementById('cfgOpenChatUrl').value = s.openChatUrl || '';
+    }
+
+    function renderAdminEmailList() {
+      const container = document.getElementById('adminEmailList');
+      document.getElementById('adminEmailCount').textContent = appState.emails.length;
+
+      if (appState.emails.length === 0) {
+        container.innerHTML = `<p class="text-xs text-center text-slate-400 py-4">ยังไม่มีรายการอีเมลในฐานข้อมูล</p>`;
+        return;
+      }
+
+      container.innerHTML = appState.emails.map(item => `
+        <div class="rounded-2xl border border-slate-200 bg-white p-3 flex items-center justify-between gap-2">
+          <div class="min-w-0 space-y-1.5">
+            <p class="text-xs sm:text-sm font-semibold text-slate-800 truncate">${escapeHtml(item.email)}</p>
+            <div class="flex items-center gap-1.5 flex-wrap">
+              ${getStatusBadgeHtml(item.status)}
+            </div>
+            <div class="flex items-center gap-x-2.5 gap-y-0.5 flex-wrap text-[11px] text-slate-500">
+              ${item.family_head ? `<span>👑 หัวแฟม: <strong class="font-medium text-slate-700">${escapeHtml(item.family_head)}</strong></span>` : ''}
+              ${item.purchase_date ? `<span>🛒 ซื้อ: <strong class="font-medium text-slate-700">${escapeHtml(item.purchase_date)}</strong></span>` : ''}
+              ${item.cycle ? `<span>📅 หมดอายุ: <strong class="font-medium text-pinkDeep">${escapeHtml(item.cycle)}</strong></span>` : ''}
+            </div>
+          </div>
+          <div class="flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              onclick="cycleEmailStatus('${escapeHtml(item.id)}')"
+              title="สลับสถานะด่วน"
+              class="w-9 h-9 rounded-xl bg-blueSoft/45 hover:bg-blueSoft text-blueDeep text-sm font-bold flex items-center justify-center"
+            >↻</button>
+            <button
+              type="button"
+              onclick="editEmail('${escapeHtml(item.id)}')"
+              title="แก้ไข"
+              class="w-9 h-9 rounded-xl bg-yellowBg hover:bg-yellowSoft text-amber-700 text-xs flex items-center justify-center"
+            >✎</button>
+            <button
+              type="button"
+              onclick="askDeleteEmail('${escapeHtml(item.id)}')"
+              title="ลบ"
+              class="w-9 h-9 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-500 text-xs flex items-center justify-center"
+            >🗑</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // เพิ่มหรือแก้ไขอีเมลใน Supabase จริง (ป้องกันกดซ้ำ)
+    async function handleEmailFormSubmit(e) {
+      e.preventDefault();
+      if (isSubmitting || !isAuthorizedAdmin || !supabaseClient) return;
+
+      const id = document.getElementById('editEmailId').value;
+      const email = document.getElementById('inputEmail').value.trim();
+      const status = document.getElementById('inputStatus').value;
+      const family_head = document.getElementById('inputFamilyHead').value.trim();
+      const purchase_date = document.getElementById('inputPurchaseDate').value.trim();
+      const cycle = document.getElementById('inputCycle').value.trim();
+      const note = document.getElementById('inputNote').value.trim();
+
+      if (!email) return;
+
+      const submitBtn = document.getElementById('emailSubmitBtn');
+      isSubmitting = true;
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'กำลังบันทึก...';
+
+      try {
+        if (id) {
+          const { error } = await supabaseClient
+            .from('email_statuses')
+            .update({ email, status, family_head, purchase_date, cycle, note })
+            .eq('id', id);
+          if (error) throw error;
+          showToast('อัปเดตข้อมูลอีเมลในฐานข้อมูลแล้ว');
+        } else {
+          const { error } = await supabaseClient
+            .from('email_statuses')
+            .insert([{ email, status, family_head, purchase_date, cycle, note }]);
+          if (error) throw error;
+          showToast('เพิ่มรายการอีเมลเรียบร้อยแล้ว');
+        }
+
+        resetEmailForm();
+        await fetchAllData(false);
+      } catch (err) {
+        console.error('Save email error:', err);
+        showToast(`บันทึกไม่สำเร็จ: ${err && err.message ? err.message : 'กรุณาลองใหม่'}`);
+      } finally {
+        isSubmitting = false;
+        submitBtn.disabled = false;
+        submitBtn.textContent = document.getElementById('editEmailId').value ? 'บันทึกการแก้ไข' : '+ บันทึกรายการอีเมล';
+      }
+    }
+
+    function editEmail(id) {
+      const item = appState.emails.find(e => e.id === id);
+      if (!item) return;
+      document.getElementById('editEmailId').value = item.id;
+      document.getElementById('inputEmail').value = item.email;
+      document.getElementById('inputStatus').value = item.status;
+      document.getElementById('inputFamilyHead').value = item.family_head || '';
+      document.getElementById('inputPurchaseDate').value = item.purchase_date || '';
+      document.getElementById('inputCycle').value = item.cycle || '';
+      document.getElementById('inputNote').value = item.note || '';
+
+      document.getElementById('emailFormTitle').textContent = 'แก้ไขรายการอีเมล';
+      document.getElementById('emailSubmitBtn').textContent = 'บันทึกการแก้ไข';
+      document.getElementById('cancelEditBtn').classList.remove('hidden');
+      document.getElementById('inputEmail').focus();
+    }
+
+    function resetEmailForm() {
+      const editIdEl = document.getElementById('editEmailId');
+      const formEl = document.getElementById('emailForm');
+      if (editIdEl) editIdEl.value = '';
+      if (formEl) formEl.reset();
+      const titleEl = document.getElementById('emailFormTitle');
+      const btnEl = document.getElementById('emailSubmitBtn');
+      const cancelEl = document.getElementById('cancelEditBtn');
+      if (titleEl) titleEl.textContent = 'เพิ่มรายการอีเมลใหม่';
+      if (btnEl) btnEl.textContent = '+ บันทึกรายการอีเมล';
+      if (cancelEl) cancelEl.classList.add('hidden');
+    }
+
+    // สลับสถานะด่วนบน Supabase จริง (ป้องกันกดซ้ำ)
+    async function cycleEmailStatus(id) {
+      if (isSubmitting || !isAuthorizedAdmin || !supabaseClient) return;
+      const item = appState.emails.find(e => e.id === id);
+      if (!item) return;
+
+      const currentIdx = STATUS_OPTIONS.indexOf(item.status);
+      const nextStatus = STATUS_OPTIONS[(currentIdx + 1) % STATUS_OPTIONS.length];
+
+      isSubmitting = true;
+      try {
+        const { error } = await supabaseClient
+          .from('email_statuses')
+          .update({ status: nextStatus })
+          .eq('id', id);
+        if (error) throw error;
+
+        await fetchAllData(false);
+        showToast(`เปลี่ยนสถานะเป็น "${nextStatus}"`);
+      } catch (err) {
+        console.error('Cycle status error:', err);
+        showToast('เปลี่ยนสถานะไม่สำเร็จ กรุณาลองใหม่');
+      } finally {
+        isSubmitting = false;
+      }
+    }
+
+    // ลบอีเมลจาก Supabase จริงผ่าน Modal ยืนยัน
+    function askDeleteEmail(id) {
+      const item = appState.emails.find(e => e.id === id);
+      if (!item) return;
+      openConfirmModal(
+        'ลบรายการอีเมล?',
+        `ต้องการลบ "${item.email}" ออกจากฐานข้อมูลใช่หรือไม่?`,
+        async () => {
+          if (isSubmitting || !isAuthorizedAdmin || !supabaseClient) return;
+          isSubmitting = true;
+          try {
+            const { error } = await supabaseClient
+              .from('email_statuses')
+              .delete()
+              .eq('id', id);
+            if (error) throw error;
+
+            await fetchAllData(false);
+            showToast('ลบรายการอีเมลเรียบร้อยแล้ว');
+          } catch (err) {
+            console.error('Delete email error:', err);
+            showToast('ลบรายการไม่สำเร็จ กรุณาลองใหม่');
+          } finally {
+            isSubmitting = false;
+          }
+        }
+      );
+    }
+
+    // บันทึกการตั้งค่าแบนเนอร์และข้อความวิ่งไปยัง Supabase จริง
+    async function saveBannerSettings(e) {
+      e.preventDefault();
+      if (isSubmitting || !isAuthorizedAdmin || !supabaseClient) return;
+
+      const btn = document.getElementById('bannerSubmitBtn');
+      isSubmitting = true;
+      btn.disabled = true;
+      btn.textContent = 'กำลังบันทึก...';
+
+      const payload = {
+        id: 1,
+        marquee_text: document.getElementById('cfgMarqueeText').value.trim(),
+        banner_url: document.getElementById('cfgBannerUrl').value.trim(),
+        billing_title: document.getElementById('cfgBillingTitle').value.trim() || 'กำหนดชำระรอบบิลวันนี้'
+      };
+
+      try {
+        const { error } = await supabaseClient
+          .from('store_settings')
+          .upsert(payload, { onConflict: 'id' });
+        if (error) throw error;
+
+        await fetchAllData(false);
+        showToast('บันทึกแบนเนอร์และข้อความวิ่งเรียบร้อยแล้ว');
+      } catch (err) {
+        console.error('Save banner settings error:', err);
+        showToast('บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
+      } finally {
+        isSubmitting = false;
+        btn.disabled = false;
+        btn.textContent = 'บันทึกแบนเนอร์และข้อความวิ่ง';
+      }
+    }
+
+    // บันทึกการตั้งค่าช่องทางติดต่อและร้านไปยัง Supabase จริง
+    async function saveStoreSettings(e) {
+      e.preventDefault();
+      if (isSubmitting || !isAuthorizedAdmin || !supabaseClient) return;
+
+      const btn = document.getElementById('storeSubmitBtn');
+      isSubmitting = true;
+      btn.disabled = true;
+      btn.textContent = 'กำลังบันทึก...';
+
+      const payload = {
+        id: 1,
+        store_name: document.getElementById('cfgStoreName').value.trim() || 'LetiO',
+        subtitle: document.getElementById('cfgSubtitle').value.trim(),
+        logo_url: document.getElementById('cfgLogoUrl').value.trim(),
+        contact_line: document.getElementById('cfgContactLine').value.trim(),
+        contact_ig: document.getElementById('cfgContactIg').value.trim(),
+        contact_url: document.getElementById('cfgContactUrl').value.trim(),
+        contact_hours: document.getElementById('cfgContactHours').value.trim(),
+        open_chat_name: document.getElementById('cfgOpenChatName').value.trim(),
+        open_chat_url: document.getElementById('cfgOpenChatUrl').value.trim()
+      };
+
+      try {
+        const { error } = await supabaseClient
+          .from('store_settings')
+          .upsert(payload, { onConflict: 'id' });
+        if (error) throw error;
+
+        await fetchAllData(false);
+        showToast('บันทึกข้อมูลร้านเรียบร้อยแล้ว');
+      } catch (err) {
+        console.error('Save store settings error:', err);
+        showToast('บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
+      } finally {
+        isSubmitting = false;
+        btn.disabled = false;
+        btn.textContent = 'บันทึกข้อมูลร้านและช่องทางติดต่อ';
+      }
+    }
+
+    // ==================== MODAL ยืนยัน & TOAST ====================
+    function openConfirmModal(title, message, onConfirm) {
+      document.getElementById('confirmTitle').textContent = title;
+      document.getElementById('confirmMessage').textContent = message;
+      confirmCallback = onConfirm;
+      document.getElementById('confirmModal').classList.remove('hidden');
+    }
+
+    function closeConfirmModal() {
+      document.getElementById('confirmModal').classList.add('hidden');
+      confirmCallback = null;
+    }
+
+    document.getElementById('confirmOkBtn').addEventListener('click', () => {
+      const fn = confirmCallback;
+      closeConfirmModal();
+      if (typeof fn === 'function') fn();
+    });
+
+    function showToast(message) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toastMessage').textContent = message;
+      toast.classList.remove('opacity-0', 'translate-y-3');
+      toast.classList.add('opacity-100', 'translate-y-0');
+
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-3');
+        toast.classList.remove('opacity-100', 'translate-y-0');
+      }, 2400);
+    }
+
+    // เริ่มต้นทำงานเมื่อโหลดหน้าเว็บเสร็จ
+    async function initApp() {
+      renderTodayDate();
+      renderFrontend();
+      await fetchAllData(false);
+      await verifyAdminSession();
+    }
+
+    if (document.readyState === 'loading') {
+      window.addEventListener('DOMContentLoaded', initApp);
+    } else {
+      initApp();
+    }
+  </script>
+</body>
+</html>
