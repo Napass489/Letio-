@@ -403,6 +403,9 @@
       </div>
 
       <div class="space-y-3 text-sm">
+        <!-- กล่องแสดงจำนวนวันที่เหลือก่อนหมดอายุ -->
+        <div id="detailExpiryCountdown" class="hidden"></div>
+
         <div class="rounded-2xl bg-cream border border-yellowSoft p-3.5 space-y-2.5">
           <div>
             <span class="text-xs text-slate-400 block">อีเมลยูทูป</span>
@@ -1068,6 +1071,105 @@
       `;
     }
 
+    // แปลงข้อความวันหมดอายุ (รองรับทั้ง 25/12/2569, 25-12-2026, 2026-12-25, 5 ธ.ค. 2569) เป็นวันที่จริง
+    function parseExpiryDate(dateStr) {
+      if (!dateStr || typeof dateStr !== 'string') return null;
+
+      // แปลงเลขไทยเป็นเลขอารบิก และตัดช่องว่างหัว-ท้าย
+      const thaiDigits = { '๐': '0', '๑': '1', '๒': '2', '๓': '3', '๔': '4', '๕': '5', '๖': '6', '๗': '7', '๘': '8', '๙': '9' };
+      const cleaned = dateStr.trim().replace(/[๐-๙]/g, d => thaiDigits[d]);
+
+      const normalizeYear = (y) => {
+        let year = parseInt(y, 10);
+        if (Number.isNaN(year)) return null;
+        if (year < 100) {
+          year = year >= 60 ? 2500 + year - 543 : 2000 + year;
+        } else if (year >= 2400) {
+          year -= 543;
+        }
+        return year;
+      };
+
+      const buildValidDate = (year, month, day) => {
+        if (!year || month < 1 || month > 12 || day < 1 || day > 31) return null;
+        const d = new Date(year, month - 1, day);
+        if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return null;
+        return d;
+      };
+
+      // รูปแบบ YYYY-MM-DD หรือ YYYY/MM/DD
+      const isoMatch = cleaned.match(/^(\d{4})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(\d{1,2})$/);
+      if (isoMatch) {
+        return buildValidDate(normalizeYear(isoMatch[1]), parseInt(isoMatch[2], 10), parseInt(isoMatch[3], 10));
+      }
+
+      // รูปแบบ DD/MM/YYYY หรือ DD-MM-YYYY (พ.ศ. หรือ ค.ศ.)
+      const dmyMatch = cleaned.match(/^(\d{1,2})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(\d{2,4})$/);
+      if (dmyMatch) {
+        return buildValidDate(normalizeYear(dmyMatch[3]), parseInt(dmyMatch[2], 10), parseInt(dmyMatch[1], 10));
+      }
+
+      // รูปแบบเดือนภาษาไทย เช่น "5 ธ.ค. 2569" หรือ "5 ธันวาคม 2569"
+      const thaiMonths = {
+        'ม.ค.': 1, 'มค': 1, 'มกราคม': 1,
+        'ก.พ.': 2, 'กพ': 2, 'กุมภาพันธ์': 2,
+        'มี.ค.': 3, 'มีค': 3, 'มีนาคม': 3,
+        'เม.ย.': 4, 'เมย': 4, 'เมษายน': 4,
+        'พ.ค.': 5, 'พค': 5, 'พฤษภาคม': 5,
+        'มิ.ย.': 6, 'มิย': 6, 'มิถุนายน': 6,
+        'ก.ค.': 7, 'กค': 7, 'กรกฎาคม': 7,
+        'ส.ค.': 8, 'สค': 8, 'สิงหาคม': 8,
+        'ก.ย.': 9, 'กย': 9, 'กันยายน': 9,
+        'ต.ค.': 10, 'ตค': 10, 'ตุลาคม': 10,
+        'พ.ย.': 11, 'พย': 11, 'พฤศจิกายน': 11,
+        'ธ.ค.': 12, 'ธค': 12, 'ธันวาคม': 12
+      };
+      const thaiMatch = cleaned.match(/^(\d{1,2})\s+([ก-ฮ.]+)\s+(\d{2,4})$/);
+      if (thaiMatch) {
+        const month = thaiMonths[thaiMatch[2]] || thaiMonths[thaiMatch[2].replace(/\./g, '')];
+        if (month) {
+          return buildValidDate(normalizeYear(thaiMatch[3]), month, parseInt(thaiMatch[1], 10));
+        }
+      }
+
+      return null;
+    }
+
+    // สร้างกล่องแสดงจำนวนวันที่เหลือก่อนหมดอายุ (โทนพาสเทลเข้ากับเว็บ LetiO)
+    function getExpiryCountdownHtml(cycleStr) {
+      const expiryDate = parseExpiryDate(cycleStr);
+      if (!expiryDate) return '';
+
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const diffDays = Math.round((expiryDate.getTime() - today.getTime()) / 86400000);
+
+      let boxClass = 'bg-gradient-to-r from-pinkSoft/45 via-white to-blueSoft/40 border-pinkSoft text-pinkDeep';
+      let subtitle = 'สิทธิ์การใช้งานยูทูปของคุณ';
+      let headline = `จะหมดอายุในอีก ${diffDays} วันค่ะ 🎀`;
+
+      if (diffDays <= 3 && diffDays >= 1) {
+        boxClass = 'bg-gradient-to-r from-yellowBg via-amber-50 to-pinkSoft/35 border-amber-200 text-amber-700';
+        subtitle = 'ใกล้ครบกำหนดต่ออายุแล้วนะคะ';
+        headline = `จะหมดอายุในอีก ${diffDays} วันค่ะ ⏰`;
+      } else if (diffDays === 0) {
+        boxClass = 'bg-gradient-to-r from-rose-50 via-pinkSoft/50 to-rose-50 border-rose-200 text-rose-600';
+        subtitle = 'แจ้งเตือนรอบบิลวันนี้';
+        headline = 'หมดอายุวันนี้แล้วค่ะ 🔔';
+      } else if (diffDays < 0) {
+        boxClass = 'bg-rose-50/90 border-rose-200 text-rose-600';
+        subtitle = 'ครบกำหนดอายุการใช้งานแล้ว';
+        headline = `หมดอายุมาแล้ว ${Math.abs(diffDays)} วันค่ะ 💌`;
+      }
+
+      return `
+        <div class="rounded-2xl border px-3 py-2.5 text-center shadow-sm ${boxClass}">
+          <p class="text-[11px] font-medium opacity-80">${subtitle}</p>
+          <p class="text-sm font-bold mt-0.5">${headline}</p>
+        </div>
+      `;
+    }
+
     // แสดงวันที่ปัจจุบันเป็นภาษาไทย
     function renderTodayDate() {
       const now = new Date();
@@ -1268,6 +1370,7 @@
                   </div>
                   <div class="shrink-0">${getStatusBadgeHtml(item.status)}</div>
                 </div>
+                ${getExpiryCountdownHtml(item.cycle)}
                 <div class="grid grid-cols-3 gap-1.5 pt-2 border-t border-slate-100 text-[11px]">
                   <div class="rounded-lg bg-pinkSoft/25 px-2 py-1.5">
                     <span class="text-[10px] text-slate-400 block">👑 หัวแฟม</span>
@@ -1336,6 +1439,16 @@
       document.getElementById('detailPurchaseDate').textContent = item.purchase_date || '-';
       document.getElementById('detailCycle').textContent = item.cycle || '-';
       document.getElementById('detailNote').textContent = item.note || 'ไม่มีหมายเหตุเพิ่มเติม';
+
+      const countdownEl = document.getElementById('detailExpiryCountdown');
+      const countdownHtml = getExpiryCountdownHtml(item.cycle);
+      if (countdownHtml) {
+        countdownEl.innerHTML = countdownHtml;
+        countdownEl.classList.remove('hidden');
+      } else {
+        countdownEl.innerHTML = '';
+        countdownEl.classList.add('hidden');
+      }
 
       document.getElementById('detailModal').classList.remove('hidden');
     }
